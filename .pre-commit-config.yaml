@@ -1,0 +1,35 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: poetry run ruff check --fix --force-exclude
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff format
+        entry: poetry run ruff format --force-exclude
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: mypy
+        name: mypy check
+        entry: poetry run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
