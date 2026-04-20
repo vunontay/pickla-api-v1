@@ -5,9 +5,9 @@ name: CI
 
 on:
   push:
-    branches: ["master"]
+    branches: ["main"]
   pull_request:
-    branches: ["master"]
+    branches: ["main"]
 
 permissions:
   contents: read
@@ -54,5 +54,10 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
-      - name: Run tests
-        run: poetry run pytest -q
+      - name: Run tests & Coverage
+        run: poetry run coverage run --source ./src -m pytest
+
+      - name: Coverage Report
+        run: |
+          poetry run coverage xml
+          poetry run coverage report -m
