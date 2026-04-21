@@ -13,9 +13,11 @@ Hosts post open match sessions; Joiners browse and join them. A Reputation Score
 | Language | Python `>=3.12` |
 | Framework | FastAPI + Uvicorn |
 | Database | PostgreSQL 16 (SQLAlchemy async + asyncpg) |
+| Cache | Redis 7 |
 | Migrations | Alembic |
 | Config | Pydantic Settings |
 | Package Manager | Poetry |
+| Containerization | Docker + Docker Compose |
 | Testing | pytest + pytest-asyncio + httpx |
 | Linting | ruff + mypy |
 
@@ -30,7 +32,7 @@ pickla-api-v1/
 │   ├── api/
 │   │   └── v1.py              # Aggregates all module routers
 │   ├── modules/
-│   │   ├── auth/              # Registration, OTP, social login, JWT
+│   │   ├── auth/              # Registration, login, JWT
 │   │   ├── users/             # User profiles, reputation log
 │   │   ├── matches/           # Match feed, create/join/leave/confirm
 │   │   ├── reports/           # Report no-shows and misconduct
@@ -47,7 +49,10 @@ pickla-api-v1/
 ├── tests/
 │   ├── conftest.py
 │   └── test_main.py
+├── docker/
 ├── alembic/
+├── Dockerfile
+├── docker-compose.yml
 ├── alembic.ini
 ├── pyproject.toml
 └── .env.example
@@ -57,53 +62,94 @@ pickla-api-v1/
 
 ## Prerequisites
 
-- Python `>=3.12` (managed via [asdf](https://asdf-vm.com/) or system install)
-- [Poetry](https://python-poetry.org/docs/#installation)
-- PostgreSQL running locally (or via Docker)
+- [Docker](https://docs.docker.com/get-docker/) + [Docker Compose](https://docs.docker.com/compose/)
+- Python `>=3.12` + [Poetry](https://python-poetry.org/docs/#installation) (for local development without Docker)
 
 ---
 
-## Installation
-
-1. Move into the project directory:
+## Quick Start (Docker)
 
 ```bash
+# 1. Clone and enter the project
+git clone <repo-url>
 cd pickla-api-v1
+
+# 2. Copy environment file
+cp .env.example .env
+
+# 3. Start all services (API + PostgreSQL + Redis)
+docker compose up -d
+
+# 4. Check services are running
+docker compose ps
 ```
 
-2. Install dependencies:
+| Service | URL |
+|---------|-----|
+| API | `http://localhost:8000` |
+| Swagger UI | `http://localhost:8000/docs` |
+| ReDoc | `http://localhost:8000/redoc` |
+| PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+
+```bash
+# Stop all services
+docker compose down
+
+# Stop and remove volumes
+docker compose down -v
+```
+
+---
+
+## Local Development (without Docker)
+
+1. Install dependencies:
 
 ```bash
 poetry install
 ```
 
-3. Copy the environment file:
+2. Copy the environment file and fill in your values:
 
 ```bash
 cp .env.example .env
 ```
 
-4. Fill in your values in `.env`:
-
-```env
-DATABASE_URL=postgresql+asyncpg://pickla:pickla@localhost/pickla
-SECRET_KEY=your-secret-key
-DEBUG=True
-```
-
----
-
-## Run the Application
+3. Run the server:
 
 ```bash
 poetry run uvicorn src.main:app --reload
 ```
 
-| URL | Description |
-|-----|-------------|
-| `http://127.0.0.1:8000/api/v1` | API base |
-| `http://127.0.0.1:8000/docs` | Swagger UI |
-| `http://127.0.0.1:8000/redoc` | ReDoc |
+---
+
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://pickla:pickla@postgres:5432/pickla` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
+| `SECRET_KEY` | JWT signing secret | `your-secret-key` |
+| `DEBUG` | Enable debug mode | `True` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | JWT access token TTL | `60` |
+
+> When running locally (without Docker), use `localhost` instead of the service names `postgres` / `redis`.
+
+---
+
+## Database Migrations
+
+```bash
+# Create a new migration
+poetry run alembic revision --autogenerate -m "description"
+
+# Apply all pending migrations
+poetry run alembic upgrade head
+
+# Rollback one step
+poetry run alembic downgrade -1
+```
 
 ---
 
@@ -111,34 +157,12 @@ poetry run uvicorn src.main:app --reload
 
 | Group | Prefix | Description |
 |-------|--------|-------------|
-| Auth | `/api/v1/auth/` | Register (phone+OTP), social login (Google/Facebook), token refresh, logout |
-| Users | `/api/v1/users/` | Profile CRUD, public profile, reputation history |
-| Matches | `/api/v1/matches/` | Match feed (with filters), create/edit/cancel, join/leave, confirm attendance |
+| Auth | `/api/v1/auth/` | Register, login, token refresh, logout |
+| Users | `/api/v1/users/` | Profile CRUD, reputation history |
+| Matches | `/api/v1/matches/` | Match feed, create/edit/cancel, join/leave |
 | Reports | `/api/v1/reports/` | Submit and review misconduct reports |
 | Ratings | `/api/v1/ratings/` | Post-match ratings (1–5 stars) |
-| Admin | `/api/v1/admin/` | User moderation, reputation adjustment, platform stats |
-
----
-
-## Database Migrations
-
-Create a new migration:
-
-```bash
-poetry run alembic revision --autogenerate -m "description"
-```
-
-Apply all pending migrations:
-
-```bash
-poetry run alembic upgrade head
-```
-
-Rollback one step:
-
-```bash
-poetry run alembic downgrade -1
-```
+| Admin | `/api/v1/admin/` | User moderation, reputation adjustment |
 
 ---
 
@@ -164,21 +188,17 @@ poetry run mypy
 
 ```bash
 # Run all tests
-poetry run pytest
+poetry run pytest -q
 
-# Run a specific file
-poetry run pytest tests/test_main.py -v
-
-# Run with stdout
-poetry run pytest -s
+# Run with coverage
+poetry run pytest --cov=src --cov-report=term-missing -q
 ```
 
-> Always run tests via `poetry run pytest` to use the correct Python 3.12 virtualenv.
 > See `tests/AGENTS.md` for full conventions, patterns, and examples.
 
 ---
 
 ## Notes
 
-- See `AGENTS.md` at the project root for architecture rules, domain business logic, and agent guidance.
+- See `AGENTS.md` at the project root for architecture rules and agent guidance.
 - See `docs/PRD.md` for full product requirements and data model definitions.

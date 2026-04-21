@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str
+    TEST_DATABASE_URL: str
+
+    REDIS_URL: str
 
     APP_NAME: str = "Pickla API V1"
     DEBUG: bool = False
