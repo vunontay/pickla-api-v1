@@ -1,7 +1,7 @@
 ---
 
 ### 🔗 Ticket
-<!-- https://app.clickup.com/t/PICKLA-xxx -->
+<!-- https://app.clickup.com/t/xxx -->
 
 ---
 
