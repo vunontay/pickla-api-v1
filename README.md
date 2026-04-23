@@ -1,5 +1,7 @@
 # Pickla API V1
 
+[![codecov](https://codecov.io/gh/vunontay/pickla-api-v1/graph/badge.svg?token=D8ZZIV3Z2H)](https://codecov.io/gh/vunontay/pickla-api-v1)
+
 Backend service for **Pickla** — a mobile-first Pickleball matchmaking platform for the Vietnamese community.
 
 Hosts post open match sessions; Joiners browse and join them. A Reputation Score system replaces financial deposits to build community trust.
