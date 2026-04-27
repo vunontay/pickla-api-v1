@@ -1,0 +1,63 @@
+---
+description: FastAPI conventions — Annotated, return types, one operation per function
+alwaysApply: true
+---
+
+# FastAPI Patterns
+
+## Always use `Annotated` for dependencies
+
+```python
+# ❌ BAD
+async def list_matches(db: AsyncSession = Depends(get_db)): ...
+
+# ✅ GOOD — create a reusable type alias
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+async def list_matches(db: DbSession): ...
+```
+
+## Always declare a return type
+
+```python
+# ❌ BAD
+@router.get("/{match_id}")
+async def get_match(match_id: int): ...
+
+# ✅ GOOD
+@router.get("/{match_id}")
+async def get_match(match_id: Annotated[int, Path(ge=1)]) -> MatchResponse: ...
+```
+
+## Validation constraints belong in FastAPI classes, not `pydantic.Field`
+
+```python
+# ❌ BAD
+async def bulk(ids: Annotated[list[int], Field(min_length=1), Body()]): ...
+
+# ✅ GOOD
+async def bulk(ids: Annotated[list[int], Body(min_length=1)]): ...
+```
+
+`pydantic.Field` is for Pydantic **model fields** only — not path operation parameters.
+
+## One HTTP operation per function
+
+```python
+# ❌ BAD
+@router.api_route("/", methods=["GET", "POST"])
+async def handle(request: Request): ...
+
+# ✅ GOOD
+@router.get("/")
+async def list_matches() -> list[MatchResponse]: ...
+
+@router.post("/")
+async def create_match(body: MatchRequest) -> MatchResponse: ...
+```
+
+## Declare prefix and tags on the router, not in `include_router()`
+
+```python
+router = APIRouter(prefix="/matches", tags=["matches"])
+```
