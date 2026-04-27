@@ -1,0 +1,38 @@
+---
+description: Layer boundaries for the Router → Service → Repository architecture
+alwaysApply: true
+---
+
+# Layer Architecture
+
+Each module typically has 4 files: `router.py`, `service.py`, `repository.py`, `schemas.py`.
+Add `models.py` when the module defines database tables.
+
+| Layer | Owns | Never |
+|---|---|---|
+| `router.py` | HTTP method, path, DI, call service | Business logic |
+| `service.py` | Orchestrate logic, call repository, raise errors | Query DB directly |
+| `repository.py` | SQLAlchemy statements | Business logic |
+| `schemas.py` | Pydantic request/response models | DB operations |
+
+```python
+# ❌ BAD — ORM query in service
+class MatchService:
+    async def get_match(self, match_id: int, db: AsyncSession):
+        result = await db.execute(select(Match).where(Match.id == match_id))
+        return result.scalar_one_or_none()
+
+# ✅ GOOD — service delegates to repository
+class MatchService:
+    async def get_match(self, match_id: int, db: AsyncSession) -> Match:
+        match = await self.repo.get_by_id(match_id)
+        if match is None:
+            raise NotFoundError("Match not found")
+        return match
+```
+
+When adding a new module:
+1. Create `src/modules/{name}/` with the 4 standard files (`router.py`, `service.py`, `repository.py`, `schemas.py`).
+2. Add `models.py` if the module defines database tables.
+3. Mount the router in `src/api/v1.py`.
+4. See `docs/architecture.md` for the full guide.

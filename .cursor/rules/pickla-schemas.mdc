@@ -1,0 +1,53 @@
+---
+description: Pydantic schema conventions — separate Request/Response, no RootModel
+alwaysApply: true
+---
+
+# Pydantic Schemas
+
+## Always separate request and response schemas
+
+```python
+# ❌ BAD — one model for both input and output
+class Match(BaseModel):
+    id: int
+    title: str
+
+# ✅ GOOD
+class MatchRequest(BaseModel):
+    title: str
+    location: str
+
+class MatchResponse(BaseModel):
+    id: int
+    title: str
+    location: str
+
+    model_config = {"from_attributes": True}
+```
+
+Naming: `{Entity}Request` for input, `{Entity}Response` for output.
+
+## Use `model_validate()` to convert ORM → response
+
+```python
+# ✅ GOOD
+@router.get("/{match_id}")
+async def get_match(...) -> MatchResponse:
+    match = await match_repo.get_by_id(match_id)
+    return MatchResponse.model_validate(match)
+```
+
+## Never expose sensitive fields in responses
+
+Response schemas explicitly whitelist fields. Internal fields (hashed password, raw tokens, internal IDs) must not appear in any `*Response` schema.
+
+## Do not use `RootModel`
+
+```python
+# ❌ BAD
+class IdList(RootModel[list[int]]): ...
+
+# ✅ GOOD
+async def bulk(ids: Annotated[list[int], Body(min_length=1)]): ...
+```
