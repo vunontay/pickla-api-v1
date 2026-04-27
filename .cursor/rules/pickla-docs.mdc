@@ -1,0 +1,36 @@
+---
+description: Documentation structure — AGENTS.md is a map, details live in docs/
+alwaysApply: true
+---
+
+# Documentation Structure
+
+`AGENTS.md` is a **map** (~80 lines). Details live in `docs/`.
+
+```
+AGENTS.md              ← entry point for agents; pointers only
+docs/
+├── architecture.md    ← layers, naming, how to add a module
+├── coding-rules.md    ← coding standards and pitfalls
+├── testing.md         ← full testing guide
+├── migrations.md      ← Alembic workflow
+├── DESIGN.md          ← subsystem design (auth, reputation, match lifecycle)
+├── SECURITY.md        ← security model
+├── RELIABILITY.md     ← reliability patterns
+├── QUALITY_SCORE.md   ← quality gates and CI standards
+├── PLANS.md           ← roadmap and phase tracking
+├── PRODUCT_SENSE.md   ← product vision and principles
+├── PRD.md             ← full product requirements
+├── design-docs/       ← engineering design decisions (ADR-style)
+├── exec-plans/        ← active and completed execution plans
+├── generated/         ← auto-generated docs (db-schema, etc.)
+├── product-specs/     ← per-feature product specs
+└── references/        ← llms.txt library references
+```
+
+## Rules
+
+- Never put detailed rules or long content directly in `AGENTS.md`.
+- When adding new documentation, create a focused file in `docs/` and add a pointer in `AGENTS.md`.
+- `exec-plans/active/` = in-flight work; `exec-plans/completed/` = done.
+- `docs/generated/` contains auto-generated files — do not hand-edit them.

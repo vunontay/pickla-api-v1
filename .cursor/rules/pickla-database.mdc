@@ -1,0 +1,61 @@
+---
+description: Async database rules — AsyncSession, get_db, no sync ORM
+alwaysApply: true
+---
+
+# Database Rules
+
+## All DB operations must be async
+
+```python
+# ❌ BAD — sync ORM inside async handler
+async def get_user(user_id: int, db: AsyncSession):
+    return db.query(User).filter(User.id == user_id).first()
+
+# ✅ GOOD
+async def get_user(user_id: int, db: AsyncSession):
+    result = await db.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+```
+
+## Always inject session via `get_db`
+
+```python
+# ❌ BAD — manual session creation
+async def create_user(data: UserRequest):
+    async with SessionLocal() as session:
+        ...
+
+# ✅ GOOD — inject via dependency
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+
+async def create_user(data: UserRequest, db: DbSession): ...
+```
+
+## Services own `commit()`, repositories only `flush()`
+
+```python
+# repository.py
+async def create(self, user: User) -> User:
+    self.db.add(user)
+    await self.db.flush()   # visible in session, not persisted yet
+    await self.db.refresh(user)
+    return user
+
+# service.py
+async def register(self, data: UserRequest) -> User:
+    user = await self.repo.create(User(...))
+    await self.db.commit()  # service commits
+    return user
+```
+
+## Settings via singleton only
+
+```python
+# ❌ BAD
+from src.shared.configs.settings import Settings
+s = Settings()
+
+# ✅ GOOD
+from src.shared.configs.settings import settings
+```
