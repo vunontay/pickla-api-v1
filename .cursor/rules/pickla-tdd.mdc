@@ -1,0 +1,28 @@
+---
+description: Enforce TDD workflow for all code changes
+alwaysApply: true
+---
+
+# TDD Required
+
+Every implementation must follow Red -> Green -> Refactor.
+
+## Workflow
+
+1. **Red**: Write or update a failing test that captures the expected behavior.
+2. **Green**: Implement the minimum code needed to make that test pass.
+3. **Refactor**: Clean up code while keeping all tests green.
+
+## Non-Negotiable
+
+- Do not add production code without a test that justifies it.
+- Do not mark a task done if relevant tests are not executed.
+- Keep tests deterministic; avoid flaky timing/network dependencies.
+- For bug fixes: first add a regression test that fails before the fix.
+- If tests cannot run due to environment limits, clearly report what blocked execution and provide exact command for local/CI verification.
+
+## Test Scope Guidance
+
+- Prefer focused unit/service tests for logic changes.
+- Add integration/API tests when behavior crosses module boundaries.
+- Assert business outcomes and error codes, not internal implementation details.

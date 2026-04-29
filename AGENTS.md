@@ -73,6 +73,7 @@ These apply everywhere — no exceptions:
 4. **Never instantiate `SessionLocal()` manually** — use `Depends(get_db)`.
 5. **Never reuse the same schema for input and output** — split into `*Request` / `*Response`.
 6. **Never commit `.env`** — only `.env.example`.
+7. **Always follow TDD** — write failing test first, then implement, then refactor.
 
 ---
 
