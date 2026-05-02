@@ -15,19 +15,19 @@ Run these commands in parallel to understand what is changing:
 
 ```bash
 # All changed files vs base branch
-git diff main...HEAD --stat
+git diff develop...HEAD --stat
 
 # Full diff for content analysis
-git diff main...HEAD
+git diff develop...HEAD
 
 # Commits on this branch
-git log main...HEAD --oneline
+git log develop...HEAD --oneline
 
 # Current branch name (may hint at ticket or feature)
 git branch --show-current
 ```
 
-If the branch has no upstream or `main` doesn't exist, fall back to:
+If the branch has no upstream or `develop` doesn't exist, fall back to:
 
 ```bash
 git diff HEAD~1 --stat
