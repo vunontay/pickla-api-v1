@@ -1,4 +1,8 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+Environment = Literal["dev", "stg", "prod"]
 
 
 class Settings(BaseSettings):
@@ -14,10 +18,18 @@ class Settings(BaseSettings):
     REDIS_URL: str
 
     APP_NAME: str = "Pickla API V1"
-    DEBUG: bool = False
+    ENVIRONMENT: Environment = "dev"
 
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+
+    @property
+    def debug(self) -> bool:
+        return self.ENVIRONMENT == "dev"
+
+    @property
+    def log_json(self) -> bool:
+        return self.ENVIRONMENT in ("stg", "prod")
 
 
 settings = Settings()
