@@ -1,21 +1,31 @@
-import logging
-
 from fastapi import FastAPI
 from src.api.v1 import router as api_router
+from src.shared.configs.logging import configure_logging
+from src.shared.configs.settings import settings
 from src.shared.errors.handlers import register_exception_handlers
-from src.shared.middlewares.error_handling import ErrorHandlingMiddleware
+from src.shared.middlewares.request_logging import RequestLoggingMiddleware
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+configure_logging(debug=settings.debug, json_logs=settings.log_json)
 
 app = FastAPI()
 
-# Middlewares
-app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
-# Routers
 app.include_router(api_router, prefix="/api/v1")
 
-# Exception handlers
 register_exception_handlers(app)
+
+
+def run() -> None:
+    import uvicorn
+
+    uvicorn.run(
+        "src.main:app",
+        host="0.0.0.0",
+        port=8000,
+        log_config=None,
+    )
+
+
+if __name__ == "__main__":
+    run()

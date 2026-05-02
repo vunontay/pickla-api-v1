@@ -2,12 +2,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from src.shared.errors.exceptions import AppException
 from src.shared.errors.handlers import register_exception_handlers
-from src.shared.middlewares.error_handling import ErrorHandlingMiddleware
+from src.shared.middlewares.request_logging import RequestLoggingMiddleware
 
 
 def build_test_client() -> TestClient:
     app = FastAPI()
-    app.add_middleware(ErrorHandlingMiddleware)
+    app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)
 
     @app.get("/app-exception")
