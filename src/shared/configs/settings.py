@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    BETTER_STACK_SOURCE_TOKEN: str | None = None
+    BETTER_STACK_INGEST_HOST: str | None = None
+
     @property
     def debug(self) -> bool:
         return self.ENVIRONMENT == "dev"

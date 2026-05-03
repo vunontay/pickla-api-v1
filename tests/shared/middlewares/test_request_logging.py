@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+from src.main import app as pickla_app
 from src.shared.middlewares.request_logging import RequestLoggingMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -32,6 +33,43 @@ def build_test_app() -> FastAPI:
     async def state_route(request: Request) -> dict[str, str]:
         return {"request_id": request.state.request_id}
 
+    @app.get("/health")
+    async def health_route() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/healthz")
+    async def healthz_route() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/readyz")
+    async def readyz_route() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+def build_app_without_probe_routes() -> FastAPI:
+    """Probe-shaped paths are not registered — e.g. deploy missing ``main`` routes."""
+    app = FastAPI()
+    app.add_middleware(RequestLoggingMiddleware)
+
+    @app.get("/ok")
+    async def ok_route() -> dict[str, str]:
+        return {"status": "ok"}
+
+    return app
+
+
+def build_app_probe_returns_500() -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(RequestLoggingMiddleware)
+
+    @app.get("/health")
+    async def unhealthy() -> None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=500, detail="unhealthy")
+
     return app
 
 
@@ -56,6 +94,12 @@ def build_app_where_inner_middleware_raises_before_response() -> FastAPI:
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(build_test_app())
+
+
+@pytest.fixture
+def pickla_client() -> TestClient:
+    """Real ``src.main:app`` — proves probe routes exist alongside middleware."""
+    return TestClient(pickla_app)
 
 
 def test_response_contains_x_request_id_header(client: TestClient) -> None:
@@ -140,6 +184,79 @@ def test_incoming_x_request_id_available_on_request_state(client: TestClient) ->
     response = client.get("/state", headers={"X-Request-ID": upstream_id})
     assert response.status_code == 200
     assert response.json()["request_id"] == upstream_id
+
+
+@pytest.mark.parametrize("path", ["/health", "/healthz", "/readyz"])
+def test_silent_probe_paths_are_not_logged(client: TestClient, path: str) -> None:
+    """Load balancer / K8s probes must not inflate log volume."""
+    with patch("src.shared.middlewares.request_logging.logger") as mock_logger:
+        response = client.get(path)
+    assert response.status_code == 200
+    mock_logger.info.assert_not_called()
+    mock_logger.warning.assert_not_called()
+    mock_logger.error.assert_not_called()
+
+
+@pytest.mark.parametrize("path", ["/health", "/healthz", "/readyz"])
+def test_silent_probe_paths_still_set_request_id_header(
+    client: TestClient, path: str
+) -> None:
+    response = client.get(path)
+    assert "x-request-id" in response.headers
+
+
+@pytest.mark.parametrize("path", ["/health", "/healthz", "/readyz"])
+def test_probe_path_404_when_unregistered_logs_warning(path: str) -> None:
+    client = TestClient(build_app_without_probe_routes())
+    with patch("src.shared.middlewares.request_logging.logger") as mock_logger:
+        response = client.get(path)
+    assert response.status_code == 404
+    mock_logger.warning.assert_called_once()
+    mock_logger.info.assert_not_called()
+    mock_logger.error.assert_not_called()
+    _msg, method, path_for_log, status, _ms = mock_logger.warning.call_args[0]
+    assert method == "GET"
+    assert status == 404
+    assert path_for_log == path
+
+
+def test_probe_path_500_response_is_logged_at_error() -> None:
+    client = TestClient(build_app_probe_returns_500())
+    with patch("src.shared.middlewares.request_logging.logger") as mock_logger:
+        response = client.get("/health")
+    assert response.status_code == 500
+    mock_logger.error.assert_called_once()
+    mock_logger.info.assert_not_called()
+    mock_logger.warning.assert_not_called()
+
+
+@pytest.mark.parametrize("path", ["/health", "/healthz", "/readyz"])
+def test_pickla_app_probe_paths_return_200_ok(
+    pickla_client: TestClient, path: str
+) -> None:
+    response = pickla_client.get(path)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.parametrize("path", ["/health", "/healthz", "/readyz"])
+def test_pickla_app_silent_probe_paths_are_not_logged(
+    pickla_client: TestClient, path: str
+) -> None:
+    with patch("src.shared.middlewares.request_logging.logger") as mock_logger:
+        response = pickla_client.get(path)
+    assert response.status_code == 200
+    mock_logger.info.assert_not_called()
+    mock_logger.warning.assert_not_called()
+    mock_logger.error.assert_not_called()
+
+
+@pytest.mark.parametrize("path", ["/health", "/healthz", "/readyz"])
+def test_pickla_app_probe_paths_still_set_request_id_header(
+    pickla_client: TestClient, path: str
+) -> None:
+    response = pickla_client.get(path)
+    assert "x-request-id" in response.headers
 
 
 def test_call_next_exception_logs_with_exception_and_request_metadata() -> None:

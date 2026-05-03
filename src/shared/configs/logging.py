@@ -4,6 +4,17 @@ import logging.config
 from datetime import UTC, datetime
 from typing import Any
 
+from src.shared.configs.settings import settings
+
+
+class _UseAppSettings:
+    """Default for ``_inject_better_stack`` overrides: read from ``settings``."""
+
+    __slots__ = ()
+
+
+_USE_APP_SETTINGS = _UseAppSettings()
+
 # Standard LogRecord attributes — excluded from the "extra" fields in JSON output.
 _STANDARD_ATTRS: frozenset[str] = frozenset(
     logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()
@@ -36,6 +47,11 @@ class JsonFormatter(logging.Formatter):
 def build_logging_config(
     *, debug: bool = False, json_logs: bool = False
 ) -> dict[str, Any]:
+    """Build the base console-only logging config dict.
+
+    Does not include any Better Stack / logtail configuration.
+    Call ``configure_logging`` to apply config with optional Better Stack support.
+    """
     level = "DEBUG" if debug else "INFO"
 
     if json_logs:
@@ -92,12 +108,62 @@ def build_logging_config(
             },
             "uvicorn.access": {
                 "handlers": ["access"],
-                "level": "INFO",
+                "level": "WARNING",
                 "propagate": False,
+            },
+            "sqlalchemy.engine": {
+                "level": "WARNING",
+                "propagate": True,
             },
         },
     }
 
 
+def _inject_better_stack(
+    config: dict[str, Any],
+    *,
+    source_token: str | None | _UseAppSettings = _USE_APP_SETTINGS,
+    ingest_host: str | None | _UseAppSettings = _USE_APP_SETTINGS,
+) -> None:
+    """Augment a console config dict with the logtail handler.
+
+    Adds the logtail handler and attaches it to the app-owned loggers
+    (pickla, uvicorn, uvicorn.access). Root logger is intentionally excluded
+    to avoid forwarding third-party library logs to Better Stack.
+
+    Raises ValueError if BETTER_STACK_SOURCE_TOKEN is not configured — a missing
+    token in a non-dev environment is a deployment error, not a recoverable state.
+
+    ``source_token`` / ``ingest_host`` default to application settings; tests may pass
+    explicit values so unit tests do not depend on process env or ``settings`` mocks.
+    """
+    resolved_token = (
+        settings.BETTER_STACK_SOURCE_TOKEN
+        if source_token is _USE_APP_SETTINGS
+        else source_token
+    )
+    resolved_host = (
+        settings.BETTER_STACK_INGEST_HOST
+        if ingest_host is _USE_APP_SETTINGS
+        else ingest_host
+    )
+    if not resolved_token:
+        raise ValueError(
+            "BETTER_STACK_SOURCE_TOKEN must be set in non-dev environments"
+        )
+    config["handlers"]["logtail"] = {
+        "class": "logtail.LogtailHandler",
+        "level": "INFO",
+        "source_token": resolved_token,
+        "host": resolved_host,
+    }
+    for name in ("pickla", "uvicorn"):
+        config["loggers"][name]["handlers"].append("logtail")
+    config["loggers"]["uvicorn.access"]["handlers"].append("logtail")
+
+
 def configure_logging(*, debug: bool = False, json_logs: bool = False) -> None:
-    logging.config.dictConfig(build_logging_config(debug=debug, json_logs=json_logs))
+    config = build_logging_config(debug=debug, json_logs=json_logs)
+    if not debug:
+        _inject_better_stack(config)
+    logging.config.dictConfig(config)

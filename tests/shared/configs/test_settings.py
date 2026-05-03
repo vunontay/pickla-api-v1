@@ -46,3 +46,18 @@ def test_default_environment_is_dev() -> None:
 def test_invalid_environment_raises_validation_error() -> None:
     with pytest.raises(ValidationError):
         make_settings(ENVIRONMENT="production")
+
+
+def test_better_stack_log_forwarding_vars_optional_by_default() -> None:
+    s = make_settings(BETTER_STACK_SOURCE_TOKEN=None, BETTER_STACK_INGEST_HOST=None)
+    assert s.BETTER_STACK_SOURCE_TOKEN is None
+    assert s.BETTER_STACK_INGEST_HOST is None
+
+
+def test_better_stack_log_forwarding_vars_can_be_set() -> None:
+    s = make_settings(
+        BETTER_STACK_SOURCE_TOKEN="qU73jvQjZrNFHimZo4miLdxF",
+        BETTER_STACK_INGEST_HOST="s1315908.eu-nbg-2.betterstackdata.com",
+    )
+    assert s.BETTER_STACK_SOURCE_TOKEN == "qU73jvQjZrNFHimZo4miLdxF"
+    assert s.BETTER_STACK_INGEST_HOST == "s1315908.eu-nbg-2.betterstackdata.com"

@@ -1,11 +1,16 @@
 import json
 import logging
+from unittest.mock import patch
 
+import pytest
 from src.shared.configs.logging import (
     JsonFormatter,
+    _inject_better_stack,
     build_logging_config,
     configure_logging,
 )
+
+_FAKE_BETTER_STACK_TOKEN = "fake-token-for-unit-tests"
 
 
 def test_production_mode_sets_pickla_logger_to_info() -> None:
@@ -22,7 +27,7 @@ def test_uvicorn_loggers_always_info_regardless_of_debug_flag() -> None:
     for debug in (True, False):
         config = build_logging_config(debug=debug)
         assert config["loggers"]["uvicorn"]["level"] == "INFO"
-        assert config["loggers"]["uvicorn.access"]["level"] == "INFO"
+        assert config["loggers"]["uvicorn.access"]["level"] == "WARNING"
 
 
 def test_config_includes_all_required_loggers() -> None:
@@ -58,9 +63,107 @@ def test_configure_logging_applies_config_to_python_logging() -> None:
     pickla_logger = logging.getLogger("pickla")
     assert pickla_logger.level == logging.DEBUG
 
-    configure_logging(debug=False)
+    with patch("src.shared.configs.logging._inject_better_stack"):
+        configure_logging(debug=False)
     pickla_logger = logging.getLogger("pickla")
     assert pickla_logger.level == logging.INFO
+
+
+def test_configure_logging_succeeds_with_json_logs() -> None:
+    with patch("src.shared.configs.logging._inject_better_stack"):
+        configure_logging(debug=False, json_logs=True)
+    pickla_logger = logging.getLogger("pickla")
+    assert pickla_logger.level == logging.INFO
+
+
+def test_better_stack_injected_when_not_debug() -> None:
+    config = build_logging_config(debug=False)
+    _inject_better_stack(
+        config,
+        source_token=_FAKE_BETTER_STACK_TOKEN,
+        ingest_host=None,
+    )
+    assert "logtail" in config["handlers"]
+    assert "logtail" in config["loggers"]["pickla"]["handlers"]
+
+
+def test_better_stack_not_injected_in_debug_mode() -> None:
+    """Dev environment uses console-only logging; no Better Stack traffic."""
+    config = build_logging_config(debug=True)
+    assert "logtail" not in config["handlers"]
+    assert "logtail" not in config["loggers"]["pickla"]["handlers"]
+
+
+def test_inject_better_stack_raises_if_token_missing() -> None:
+    """Fail loudly when non-dev is deployed without the required token."""
+    config = build_logging_config()
+    with pytest.raises(ValueError, match="BETTER_STACK_SOURCE_TOKEN"):
+        _inject_better_stack(config, source_token=None)
+
+
+def test_inject_better_stack_explicit_token_does_not_use_settings_singleton() -> None:
+    """Fails if tests call inject without kwargs: no BETTER_STACK_* in env required."""
+    config = build_logging_config()
+    with patch("src.shared.configs.logging.settings") as mock_settings:
+        mock_settings.BETTER_STACK_SOURCE_TOKEN = None
+        mock_settings.BETTER_STACK_INGEST_HOST = None
+        _inject_better_stack(
+            config,
+            source_token=_FAKE_BETTER_STACK_TOKEN,
+            ingest_host=None,
+        )
+    assert config["handlers"]["logtail"]["source_token"] == _FAKE_BETTER_STACK_TOKEN
+
+
+def test_uvicorn_access_logger_suppressed_to_warning() -> None:
+    config = build_logging_config()
+    assert config["loggers"]["uvicorn.access"]["level"] == "WARNING"
+
+
+def test_plain_mode_uvicorn_access_uses_access_handler_not_default() -> None:
+    """Uvicorn access records need client_addr / request_line in plain text."""
+    config = build_logging_config(json_logs=False)
+    assert config["loggers"]["uvicorn.access"]["handlers"] == ["access"]
+    assert config["handlers"]["access"]["formatter"] == "access"
+    fmt = config["formatters"]["access"]["format"]
+    assert "%(client_addr)s" in fmt
+    assert "%(request_line)s" in fmt
+
+
+def test_json_mode_uvicorn_access_uses_access_handler() -> None:
+    config = build_logging_config(json_logs=True)
+    assert config["loggers"]["uvicorn.access"]["handlers"] == ["access"]
+
+
+def test_sqlalchemy_engine_suppressed_to_warning() -> None:
+    """Prevents SQL query spam in Better Stack on every DB operation."""
+    config = build_logging_config()
+    assert config["loggers"]["sqlalchemy.engine"]["level"] == "WARNING"
+
+
+def test_inject_better_stack_adds_logtail_to_app_loggers() -> None:
+    config = build_logging_config()
+    _inject_better_stack(
+        config,
+        source_token=_FAKE_BETTER_STACK_TOKEN,
+        ingest_host=None,
+    )
+
+    assert "logtail" in config["handlers"]
+    assert "logtail" in config["loggers"]["pickla"]["handlers"]
+    assert "logtail" in config["loggers"]["uvicorn"]["handlers"]
+    assert config["loggers"]["uvicorn.access"]["handlers"] == ["access", "logtail"]
+
+
+def test_inject_better_stack_does_not_add_logtail_to_root() -> None:
+    config = build_logging_config()
+    _inject_better_stack(
+        config,
+        source_token=_FAKE_BETTER_STACK_TOKEN,
+        ingest_host=None,
+    )
+
+    assert "logtail" not in config["root"]["handlers"]
 
 
 def test_plain_mode_does_not_use_json_formatter() -> None:
