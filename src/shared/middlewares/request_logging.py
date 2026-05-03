@@ -8,6 +8,8 @@ from starlette.responses import Response
 
 logger = logging.getLogger("pickla.requests")
 
+_SILENT_PATHS: frozenset[str] = frozenset({"/health", "/healthz", "/readyz"})
+
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Log each request: method, path+query in the message line, status, duration.
@@ -21,6 +23,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     The resolved id is stored on ``request.state`` and echoed on the response
     ``X-Request-ID`` header.
+
+    Liveness-style paths (``/health``, ``/healthz``, ``/readyz``) skip *successful*
+    request lines to limit probe noise; 4xx/5xx and uncaught exceptions are still
+    logged so a missing route or broken handler is visible in production.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -29,6 +35,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         path_for_log = path + (f"?{request.url.query}" if request.url.query else "")
         start_time = time.perf_counter()
+        silent_probe = path in _SILENT_PATHS
 
         try:
             response = await call_next(request)
@@ -51,6 +58,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         duration_ms = (time.perf_counter() - start_time) * 1000
         status = response.status_code
+
+        if silent_probe and status < 400:
+            response.headers["X-Request-ID"] = request_id
+            return response
 
         if status >= 500:
             log = logger.error

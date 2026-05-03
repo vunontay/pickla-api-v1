@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI
 from src.api.v1 import router as api_router
 from src.shared.configs.logging import configure_logging
@@ -11,14 +12,28 @@ app = FastAPI()
 
 app.add_middleware(RequestLoggingMiddleware)
 
+
+@app.get("/health", tags=["probes"])
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/healthz", tags=["probes"])
+async def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/readyz", tags=["probes"])
+async def readyz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 app.include_router(api_router, prefix="/api/v1")
 
 register_exception_handlers(app)
 
 
 def run() -> None:
-    import uvicorn
-
     uvicorn.run(
         "src.main:app",
         host="0.0.0.0",
